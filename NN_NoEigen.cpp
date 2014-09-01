@@ -196,8 +196,7 @@ public:
 		return layer[this->NumOfLayer-1].BackPropagation( _teach , _rate );
 	}
 
-	/*
-	bool SaveToFile(const char* fileName){
+	bool Save(const char* fileName){
 		std::vector<double> testVec;
 		testVec.push_back( this->NumOfLayer );
 		for(int i=1;i<this->NumOfLayer;i++){
@@ -205,18 +204,20 @@ public:
 			testVec.push_back( layer[i-1].NumOfNeuron );
 			for(int j=0;j<layer[i].NumOfNeuron;j++){
 				for(int k=0;k<layer[i-1].NumOfNeuron;k++){
-					testVec.push_back( layer[i].WeightMatrix(j,k) );
+					testVec.push_back( layer[i].WeightMatrix[k+j*layer[i-1].NumOfNeuron] );
 				}
 			}
 		}
 		std::ofstream ofs(fileName, std::ios::binary);
 		if (ofs.fail()) return false;
 		ofs.write(reinterpret_cast<const char*>(&testVec[0]), sizeof(double) * testVec.size());
+		if (ofs.fail()) return false;
 		ofs.flush();
-		if (ofs.fail()) return false; else return true;	
+		if (ofs.fail()) return false;
+		return true;	
 	}
 
-	bool LoadFromFile(const char* fileName){
+	bool Load(const char* fileName){
 		std::ifstream ifs(fileName, std::ios::binary);
 		if (ifs.fail()) return false;
 		const size_t fileSize = static_cast<size_t>(ifs.seekg(0, std::ios::end).tellg());
@@ -230,50 +231,56 @@ public:
 				int row = testVec[ offset++ ];
 				int col = testVec[ offset++ ];
 				for(int j=0;j<row;j++) for(int k=0;k<col;k++)
-					layer[i].WeightMatrix(j,k) = testVec[ offset++ ];	
+					layer[i].WeightMatrix[k+j*col] = testVec[ offset++ ];	
 			}
 		}else return false;
 		return true;
 	}
-	*/
+
 };
 
-template<typename T_n> void SaveMatrix(const char* fileName,int _row,int _col,T_n &_mat){
-	std::vector<double> testVec;
+template<typename T_n> bool SaveMatrix(const char* fileName,int _row,int _col,T_n _mat[]){
+	std::vector<T_n> testVec;
 	testVec.push_back( _row );
 	testVec.push_back( _col );
 	for(int i=0;i< _row;i++)
 	for(int j=0;j< _col;j++)
-	testVec.push_back( _mat(i,j) );
+	testVec.push_back( _mat[ j + i * _col ] );
 	std::ofstream ofs(fileName, std::ios::binary);
-	ofs.write(reinterpret_cast<const char*>(&testVec[0]), sizeof(double) * testVec.size());
+	if (ofs.fail()) return false;
+	ofs.write(reinterpret_cast<const char*>(&testVec[0]), sizeof(T_n) * testVec.size());
+	if (ofs.fail()) return false;
 	ofs.flush();
+	if (ofs.fail()) return false;
 	ofs.close();
-	return;
+	if (ofs.fail()) return false;
+	return true;
 }
 
-template<typename T_n> void LoadMatrix(const char* fileName ,int *info , T_n &_mat){
+template<typename T_n> bool LoadMatrix(const char* fileName ,int *info , T_n _mat[]){
 	std::ifstream ifs(fileName, std::ios::binary);
+	if (ifs.fail()) return false;
 	const size_t fileSize = static_cast<size_t>(ifs.seekg(0, std::ios::end).tellg());
 	ifs.seekg(0, std::ios::beg);
-	std::vector<double> testVec(fileSize / sizeof(double));
+	std::vector<T_n> testVec(fileSize / sizeof(T_n));
 	ifs.read(reinterpret_cast<char*>(&testVec[0]), fileSize);
 	ifs.close();
 	int offset = 0;
 	int _row = testVec[ offset++ ];
 	int _col = testVec[ offset++ ];
-	std::cout << "row=" << _row << std::endl;
-	std::cout << "col=" << _col << std::endl;
+	//std::cout << "row=" << _row << std::endl;
+	//std::cout << "col=" << _col << std::endl;
 	if(info!=NULL){
 	info[0] = _row;
 	info[1] = _col;
 	}
-	for(int i=0;i<_row;i++) for(int j=0;j<_col;j++) _mat(i,j) = testVec[ offset++ ];
-	
-	return;
+	for(int i=0;i<_row;i++)
+		for(int j=0;j<_col;j++)
+			_mat[ j + i * _col] = testVec[ offset++ ];
+	return true;
 }
 
-int main(int argc,char *argv[]){
+void MakeData(){
 
 	double Input[] = 
 	{1,1,1,1,1,
@@ -349,6 +356,18 @@ int main(int argc,char *argv[]){
 	0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0
 	};
 
+	SaveMatrix<double>("A.bin",10,25,Input);
+	SaveMatrix<double>("B.bin",10,10,Output);
+
+
+	return;
+
+}
+
+int main(int argc,char *argv[]){
+
+	double *Input = new double[10*25];
+	double *Output = new double[10*10];
 
 	NeuralNetwork nn1;
 	nn1.Init(3);
@@ -356,15 +375,32 @@ int main(int argc,char *argv[]){
 	nn1.Add(1,HIDDEN_LAYER,20);
 	nn1.Add(2,OUTPUT_LAYER,10);
 	nn1.Show();
+	//MakeData();
 
-	while(1){
-		double e = 0.0;
-		for(int j=0;j<10;j++){
-			nn1.Compute( Input + 25 * j , NULL );
-			e+=nn1.BackPropagation( Output + 10 * j , 0.9 );
+	int info[2];
+	LoadMatrix<double>("A.bin",info,Input);
+	std::cout << "[A] " << info[0] << " " << info[1] << std::endl;
+	LoadMatrix<double>("B.bin",info,Output);
+	std::cout << "[B] " << info[0] << " " << info[1] << std::endl;
+
+	if( nn1.Load("N.bin") ){
+		std::cout << "Load Passed." << std::endl;
+	}else{
+		std::cout << "Load Failed." << std::endl;
+		while(1){
+			double e = 0.0;
+			for(int j=0;j<10;j++){
+				nn1.Compute( Input + 25 * j , NULL );
+				e+=nn1.BackPropagation( Output + 10 * j , 0.9 );
+			}
+			//std::cout << "e=" << e << std::endl;
+			if( e < 0.001) break;
 		}
-		//std::cout << "e=" << e << std::endl;
-		if( e < 0.001) break;
+		if( nn1.Save("N.bin") ){
+			std::cout << "Save Passed." << std::endl;
+		}else{
+			std::cout << "Save Failed." << std::endl;
+		}
 	}
 
 	double Temp[10];
@@ -373,10 +409,10 @@ int main(int argc,char *argv[]){
 		std::cout << "[" << i << "] ";
 		for(int j=0;j<10;j++) std::cout << Temp[j] << ",";
 		std::cout << std::endl;
-
 	}
-
-
+	
+	delete[] Input;
+	delete[] Output;
 
 	return 0;
 }
