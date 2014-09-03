@@ -1,4 +1,6 @@
 #include <iostream>
+#include <string>
+#include <sstream>
 #include <cmath>
 
 #include <boost/thread.hpp>
@@ -44,11 +46,11 @@ public:
 		for(int i=0;i<_num;i++) DeltaVector[i] = 0.0;
 		if(_type != INPUT_LAYER){
 			boost::mt19937            gen( static_cast<unsigned long>(time(0)) );
-			boost::uniform_smallint<> dst( -1000, 1000 );
+			boost::uniform_smallint<> dst( -10000, 10000 );
 			boost::variate_generator< boost::mt19937&, boost::uniform_smallint<> > rand( gen, dst );
 			int temp = _num * _pp->NumOfNeuron;
 			WeightMatrix = new double[ temp ];
-			for(int i=0;i<temp;i++) WeightMatrix[i] = rand() / 1000.0;
+			for(int i=0;i<temp;i++) WeightMatrix[i] = rand() / 10000.0;
 		}
 		return;
 	}
@@ -239,6 +241,7 @@ public:
 
 };
 
+//Binary
 template<typename T_n> bool SaveMatrix(const char* fileName,int _row,int _col,T_n _mat[]){
 	std::vector<T_n> testVec;
 	testVec.push_back( _row );
@@ -257,6 +260,7 @@ template<typename T_n> bool SaveMatrix(const char* fileName,int _row,int _col,T_
 	return true;
 }
 
+//Binary
 template<typename T_n> bool LoadMatrix(const char* fileName ,int *info , T_n _mat[]){
 	std::ifstream ifs(fileName, std::ios::binary);
 	if (ifs.fail()) return false;
@@ -280,6 +284,40 @@ template<typename T_n> bool LoadMatrix(const char* fileName ,int *info , T_n _ma
 	return true;
 }
 
+template<typename T_n> void  LoadCsv(std::string filename,int info[],T_n mat[]){
+	std::ifstream ifs( filename );
+	std::string str;
+	if( !ifs ) {
+		std::cout << "Error:Input data file not found" << std::endl;
+		return;
+	}
+	int cnt=0;
+	int row = 0;
+	int col = 0;
+	while( std::getline( ifs, str ) ){
+		std::string token;
+		std::istringstream stream( str );
+		int TempCol = 0;
+		while( std::getline( stream, token, ',' ) ) {
+			std::stringstream ss;
+			double temp;
+			ss << token;
+			ss >> temp;
+			mat[cnt] = temp;
+			TempCol++;
+			cnt++;
+		}
+		if( col < TempCol ) col = TempCol;
+		row++;
+	}
+	if(info!=NULL){
+		info[0] = row;
+		info[1] = col;
+	}
+	return;
+}
+
+/*
 void MakeData(){
 
 	double Input[] = 
@@ -359,21 +397,24 @@ void MakeData(){
 	SaveMatrix<double>("A.bin",10,25,Input);
 	SaveMatrix<double>("B.bin",10,10,Output);
 
-
 	return;
-
 }
+
+*/
 
 int main(int argc,char *argv[]){
 
-	double *Input = new double[10*25];
-	double *Output = new double[10*10];
+	int NumOfSample = 10;
+	int DimOfInput = 25;
+	int DimOfOutput = 10;
+	double *Input = new double[NumOfSample * DimOfInput];
+	double *Output = new double[NumOfSample * DimOfOutput];
 
 	NeuralNetwork nn1;
 	nn1.Init(3);
-	nn1.Add(0,INPUT_LAYER,25);
+	nn1.Add(0,INPUT_LAYER,DimOfInput);
 	nn1.Add(1,HIDDEN_LAYER,20);
-	nn1.Add(2,OUTPUT_LAYER,10);
+	nn1.Add(2,OUTPUT_LAYER,DimOfOutput);
 	nn1.Show();
 	//MakeData();
 
@@ -383,18 +424,34 @@ int main(int argc,char *argv[]){
 	LoadMatrix<double>("B.bin",info,Output);
 	std::cout << "[B] " << info[0] << " " << info[1] << std::endl;
 
+	std::cout << "Loading Neural Network..." << std::endl;
+
 	if( nn1.Load("N.bin") ){
 		std::cout << "Load Passed." << std::endl;
 	}else{
 		std::cout << "Load Failed." << std::endl;
+		int Iter = 0;
 		while(1){
+			//Back-Propagation
 			double e = 0.0;
-			for(int j=0;j<10;j++){
-				nn1.Compute( Input + 25 * j , NULL );
-				e+=nn1.BackPropagation( Output + 10 * j , 0.9 );
+			for(int i=0;i<NumOfSample;i++){
+				nn1.Compute( Input + DimOfInput * i , NULL );
+				e+=nn1.BackPropagation( Output + DimOfOutput * i , 0.9 );
 			}
-			//std::cout << "e=" << e << std::endl;
-			if( e < 0.001) break;
+			std::cout << "[" << Iter << "] e=" << e << std::endl;
+			//Interval Save Function
+			if( Iter!=0 && Iter%100 == 0){
+				if( nn1.Save("N.bin") ){
+					std::cout << "Interval Save Passed." << std::endl;
+				}else{
+					std::cout << "Interval Save Failed." << std::endl;
+				}
+			}
+			//Convergence Check
+			if( e < 0.001){
+				break;
+			}
+			Iter++;
 		}
 		if( nn1.Save("N.bin") ){
 			std::cout << "Save Passed." << std::endl;
@@ -403,11 +460,12 @@ int main(int argc,char *argv[]){
 		}
 	}
 
-	double Temp[10];
-	for(int i=0;i<10;i++){
-		nn1.Compute( Input + 25 * i , Temp );
+	double Temp[DimOfOutput];
+	for(int i=0;i<NumOfSample;i++){
+		nn1.Compute( Input + DimOfInput * i , Temp );
 		std::cout << "[" << i << "] ";
-		for(int j=0;j<10;j++) std::cout << Temp[j] << ",";
+		for(int j=0;j<DimOfOutput;j++)
+			std::cout << Temp[j] << ",";
 		std::cout << std::endl;
 	}
 	
