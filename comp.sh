@@ -1,2 +1,2 @@
 #!/bin/sh
-g++ -o main NN_NoEigen.cpp -I /usr/local/include -L /usr/local/lib -lboost_system
+nvcc -arch sm_13 -o main NN.cu -I /usr/local/cuda/include -I ../nvcc_test/inc/ -L /usr/local/cuda/lib -lcudart -lcublas -lcusparse
